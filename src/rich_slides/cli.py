@@ -175,14 +175,12 @@ def edit_deck(path: Path, no_color: bool = False) -> None:
 
     def show():
         console.clear()
-        console.print(Align.center(Text(f"{index + 1} / {len(slides)}", style="grey42")))
-        console.print()
-        console.print(Align.center(Text("sledd editor", style="bold bright_white")))
         console.print()
         console.print()
-        text = slides[index]
-        cursor = Text(f"{text}\u258a", justify="center")
-        console.print(Align.center(cursor))
+        line = Text(justify="center")
+        line.append(f"slide {index + 1}: ", style="bold cyan")
+        line.append(f"{slides[index]}\u258a")
+        console.print(Align.center(line))
         console.print()
         console.print(Align.center(Text("type to write  \u00b7  Enter new slide  \u00b7  Backspace on empty deletes slide", style="grey42")))
         console.print(Align.center(Text("\u2190 \u2192 move  \u00b7  Esc save & exit", style="grey42")))
