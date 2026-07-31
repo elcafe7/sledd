@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sledd"
+version = "0.1.0"
+description = "PowerPoint-style presentations that live entirely in your terminal"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Nate" }]
+dependencies = ["rich>=13.7"]
+keywords = ["cli", "presentations", "rich", "slides", "terminal"]
+classifiers = [
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[project.scripts]
+sledd = "rich_slides.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rich_slides"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+pythonpath = ["src"]
