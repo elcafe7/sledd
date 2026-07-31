@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
-from rich_slides.cli import demo_deck_path, init_deck
+from rich_slides.cli import deck_to_markdown, demo_deck_path, init_deck
 from rich_slides.deck import load_deck, parse_deck
 from rich_slides.render import render_slide
 
@@ -69,3 +69,20 @@ def test_demo_has_seven_slides_and_notes() -> None:
     assert len(deck) == 7
     assert deck.theme == "ember"
     assert all(slide.notes for slide in deck.slides)
+
+
+def test_editor_serializes_one_line_per_slide() -> None:
+    markdown = deck_to_markdown(["One idea", "", "Two ideas"], "My talk")
+    deck = parse_deck(markdown)
+
+    assert deck.title == "My talk"
+    assert len(deck) == 2
+    assert deck.slides[0].markdown == "# One idea"
+    assert deck.slides[1].markdown == "# Two ideas"
+
+
+def test_editor_empty_deck_writes_no_slides() -> None:
+    markdown = deck_to_markdown(["", ""], "Empty")
+    with pytest.raises(ValueError, match="no slides"):
+        parse_deck(markdown)
+

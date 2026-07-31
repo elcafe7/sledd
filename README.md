@@ -27,6 +27,21 @@ sledd --init talk.md
 sledd talk.md
 ```
 
+## Making slides
+
+`sledd --edit talk.md` (or **New deck** in the menu) opens the terminal editor — one line per slide:
+
+```
+2 / 3
+
+> every slide is one line of text
+
+type to write  ·  Enter new slide  ·  Backspace on empty deletes slide
+← → move  ·  Esc save & exit
+```
+
+Type to write the current slide, `Enter` commits it and opens the next, `←` / `→` move between slides, and `Backspace` on an empty slide deletes that slide from the deck — even in the middle — and the slides re-count. `Esc` saves the deck and presents it immediately.
+
 ## Deck format
 
 Slides are Markdown blocks separated by a line containing exactly `---`:
@@ -99,6 +114,9 @@ sledd talk.md --theme ember --width 120
 # Create or replace a starter deck
 sledd --init talk.md
 sledd --init talk.md --force
+
+# Write a deck slide by slide in the terminal
+sledd --edit talk.md
 ```
 
 Interactive mode requires a TTY. Piped commands should use `--print`; image-producing workflows should use `--export-svg DIR`.

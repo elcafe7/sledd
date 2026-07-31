@@ -73,3 +73,8 @@ def render_slide(
     if height and width:
         return Align.center(_vcenter(text, width, height), width=width)
     return Align.center(Text(text, justify="center"), width=width or 100)
+
+
+def render_slide_stripped(deck: Deck, index: int) -> str:
+    """Return a slide's plain-text content (for the editor)."""
+    return strip_md(deck.slides[index].markdown)

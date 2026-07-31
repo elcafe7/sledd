@@ -78,7 +78,7 @@ MENU_ITEMS: list[MenuItem] = [
     MenuItem("Open deck", "present a markdown file", "open"),
     MenuItem("This folder", "pick a .md from here", "folder"),
     MenuItem("Recent decks", "return to a previous show", "recent"),
-    MenuItem("New deck", "write a fresh template", "new"),
+    MenuItem("New deck", "make slides in the editor", "new"),
     MenuItem("Quick guide", "learn the format", "guide"),
     MenuItem("Quit", "return to the shell", "quit"),
 ]
@@ -98,6 +98,142 @@ def _read_key() -> str:
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, prev)
     return key
+
+
+def _read_edit_key() -> str:
+    import os
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    prev = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        first = os.read(fd, 1)
+        if first == b"\x1b":
+            second = os.read(fd, 1)
+            if second == b"[":
+                third = os.read(fd, 1)
+                if third in (b"D", b"C", b"A", b"B"):
+                    return f"\x1b[{third.decode()}"
+                return "\x1b"
+            if second == b"\x03":
+                return "\x03"
+            return "\x1b"
+        if first in (b"\x7f", b"\x08"):
+            return "\x7f"
+        if first in (b"\r", b"\n"):
+            return "\r"
+        try:
+            return first.decode("utf-8")
+        except UnicodeDecodeError:
+            while True:
+                try:
+                    return (first + os.read(fd, 1)).decode("utf-8")
+                except UnicodeDecodeError:
+                    continue
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, prev)
+
+
+def deck_to_markdown(slides: list[str], title: str, theme: str = "ocean") -> str:
+    """Serialize edited slide lines into the sledd deck format."""
+    clean = [slide for slide in slides if slide]
+    if not clean:
+        return f"""<!-- sledd
+title: {title}
+theme: {theme}
+-->
+"""
+    lines = [f"<!-- sledd\ntitle: {title}\ntheme: {theme}\n-->"]
+    for i, slide in enumerate(clean):
+        if i:
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+        lines.append(f"# {slide}")
+    return "\n".join(lines) + "\n"
+
+
+def edit_deck(path: Path, no_color: bool = False) -> None:
+    """Interactive one-line-per-slide deck editor."""
+    console = Console(no_color=no_color)
+    title = path.stem
+    if path.is_file():
+        try:
+            deck = load_deck(path)
+            slides = [render_slide_stripped(deck, i) for i in range(len(deck))]
+            slides = [" ".join(slide.split()) for slide in slides]
+            if not slides:
+                slides = [""]
+            title = deck.title
+        except (ValueError, OSError):
+            slides = [""]
+    else:
+        slides = [""]
+    index = 0
+
+    def show():
+        console.clear()
+        console.print(Align.center(Text(f"{index + 1} / {len(slides)}", style="grey42")))
+        console.print()
+        console.print(Align.center(Text("sledd editor", style="bold bright_white")))
+        console.print()
+        console.print()
+        text = slides[index]
+        cursor = Text(f"{text}\u258a", justify="center")
+        console.print(Align.center(cursor))
+        console.print()
+        console.print(Align.center(Text("type to write  \u00b7  Enter new slide  \u00b7  Backspace on empty deletes slide", style="grey42")))
+        console.print(Align.center(Text("\u2190 \u2192 move  \u00b7  Esc save & exit", style="grey42")))
+
+    show()
+    while True:
+        key = _read_edit_key()
+        if key in ("\x1b", "\x03"):
+            break
+        if key == "\x7f":
+            if slides[index]:
+                slides[index] = slides[index][:-1]
+                show()
+            elif len(slides) > 1:
+                del slides[index]
+                index = max(0, min(index - 1, len(slides) - 1))
+                show()
+            continue
+        if key == "\r":
+            slides.insert(index + 1, "")
+            index += 1
+            show()
+            continue
+        if key == "\x1b[D":
+            index = max(0, index - 1)
+            show()
+            continue
+        if key == "\x1b[C":
+            index = min(len(slides) - 1, index + 1)
+            show()
+            continue
+        if key in ("\x1b[A", "\x1b[B"):
+            continue
+        if key == "\t":
+            slides[index] += "    "
+            show()
+            continue
+        slides[index] += key
+        show()
+
+    if any(slide for slide in slides):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(deck_to_markdown(slides, title), encoding="utf-8")
+        saved = load_deck(path)
+        console.clear()
+        console.print(Align.center(Text(f"Saved {path}", style="bold green")))
+        console.print()
+        present(saved, _theme(saved, None), False, no_color)
+    else:
+        console.clear()
+        console.print(Align.center(Text("no slides written, nothing saved", style="grey62")))
 
 
 def _render_menu(console: Console, items: list[MenuItem], selected: int, info: str = "") -> None:
@@ -238,12 +374,9 @@ def _handle_action(console: Console, action: str, no_color: bool) -> None:
     if action == "new":
         path = Prompt.ask("new deck path", default="talk.md", console=console)
         path = Path(path).expanduser()
-        force = path.exists() and Confirm.ask(
-            f"replace {path}?", default=False, console=console
-        )
-        if path.exists() and not force:
-            return
-        init_deck(path, force)
+        edit_deck(path, no_color)
+        if path.is_file():
+            _remember(path)
         return
     if action == "guide":
         console.clear()
@@ -312,6 +445,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--print", dest="print_all", action="store_true", help="render every slide without interaction")
     result.add_argument("--export-svg", metavar="DIR", type=Path, help="export each slide as SVG")
     result.add_argument("--init", metavar="PATH", type=Path, help="write a sample deck and exit")
+    result.add_argument("--edit", metavar="PATH", type=Path, help="edit a deck slide by slide in the terminal")
     result.add_argument("--force", action="store_true", help="overwrite an existing file with --init")
     result.add_argument("--width", type=int, default=100, help="output width for print/export (default: 100)")
     result.add_argument("--no-color", action="store_true", help="disable color")
@@ -408,6 +542,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.init:
             init_deck(args.init, args.force)
             console.print(f"Created [bold]{args.init}[/]")
+            return 0
+        if args.edit:
+            edit_deck(args.edit, args.no_color)
             return 0
         if args.demo and args.deck:
             raise ValueError("pass either a deck path or --demo, not both")
